@@ -1,3 +1,3 @@
-import PyPDF2
+import fitz
 import numpy as np
 

@@ -6,6 +6,7 @@ This is
 
 ## Installation
 ```
+python3 -m pip install pymupdf
 python3 -m pip install -r requirements.txt
 ```
 

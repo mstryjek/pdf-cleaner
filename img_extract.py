@@ -12,3 +12,4 @@ def get_img_name(pdf_path) -> str:
 
     pix.save(imname)
     return imname
+

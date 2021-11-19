@@ -1,8 +1,17 @@
+from typing import Any, List, Tuple
 import numpy as np
 import cv2
-from math import ceil
+from math import sin, tan
 import matplotlib.pyplot as plt
 
+
+def sgn(x: Any) -> int:
+    if x == 0:
+        return 0
+    elif x > 0:
+        return 1
+    else:
+        return -1
 
 
 def thresh(img: np.ndarray, thresh: int = 20) -> np.ndarray:
@@ -164,34 +173,128 @@ def average_lines(lines: np.ndarray) -> np.ndarray:
     e3_parametric = np.mean(edge3(lines), axis=0)
     e4_parametric = np.mean(edge4(lines), axis=0)
 
-    return np.stack([e1_parametric, e2_parametric, e3_parametric, e4_parametric],
+    return np.stack([e1_parametric, e4_parametric, e2_parametric, e3_parametric],
             axis=0)
 
 
 def get_intersection_points(lines: np.ndarray) -> np.ndarray:
     """Get corner points of four lines."""
-    ...
+    params_ids = [(i-1, i) for i in range(len(lines))]
+    param_intersection_points = [(lines[i], lines[j]) for i,j in params_ids]
+
+    points = []
+
+    for line1, line2 in param_intersection_points:
+        r1, theta1 = line1
+        r2, theta2 = line2
+
+        ## Inclination terms for both lines
+        a1 = -1/tan(theta1)
+        a2 = -1/tan(theta2)
+
+        ## Free terms for both lines
+        b1 = r1/sin(theta1)
+        b2 = r2/sin(theta2)
+
+        ## Points coordinates
+        x = -(b2-b1)/(a2-a1)
+        y = a1*x+b1
+
+        points.append((int(x), int(y)))
+
+    return points
+
+
+def draw_points(img: np.ndarray, points: List[Tuple[int, int]]) -> np.ndarray:
+    """
+    Draw intersection points onto the image.
+    """
+    for point in points:
+        img = cv2.circle(img, point, 10, (255, 0, 0), -1)
+
+    return img
+
+
+def get_page_center(points: List[Tuple[int, int]]) -> Tuple[int, int]:
+    """Get center of page knowing the corners."""
+    return np.mean(points, axis=0, dtype=int)
+
+
+def march_corner(img: np.ndarray,
+                 center: Tuple[int, int],
+                 corner: Tuple[int, int],
+                 margin: int) -> Tuple[int, int]:
+    """
+    Get inside corner corresponding to outside corner.
+    Expects grayscale image.
+    """
+    reached_corner = False
+    reached_horizontal_edge = False
+    reached_vertical_edge = False
+
+    step_x = sgn(corner[0] - center[0])
+    step_y = sgn(corner[1] - center[1])
+
+    x, y = center
+
+    while not reached_corner:
+
+        ## March towards horizontal edge (left/right)
+        if not reached_horizontal_edge:
+            x += step_x
+            margin_x = x+(step_x*margin)
+            if margin_x == img.shape[0] or margin_x < 0:
+                reached_horizontal_edge = True
+            elif img[margin_x, y] == 0:
+                reached_horizontal_edge = True
+
+        ## March towards vertical edge (top/bottom)
+        if not reached_vertical_edge:
+            y += step_y
+            margin_y = y+(step_y*margin)
+            if margin_y == img.shape[1] or margin_y < 0:
+                reached_vertical_edge = True
+            elif img[x, margin_y] == 0:
+                reached_vertical_edge = True
+
+        reached_corner = reached_horizontal_edge and reached_vertical_edge
+
+    return (x, y)
 
 
 """
 Processing path:
 1. Low thresh (global)
-3. Closing
-4. Median blur (large `ksize`)
-5. Get largest area contour
-6. Draw contour
-7. Hough lines
-8. Group lines into four edges
-9. Get average parametric repr of each edge
-10. Get corners as edge intersections
-"""
-
-"""
+2. Closing
+3. Median blur (large `ksize`)
+4. Get largest area contour
+5. Draw contour
+6. Hough lines
+7. Group lines into four edges
+8. Get average parametric repr of each edge
+9. Get corners as edge intersections
+10. Get center of page
+11. Get inside corners
+-------------------------------------------
 TODO
-- Get corner intersection points.
-- Create marching algorithm, fixing the curvature of the scan.
+- get max deviation of edge from line corresponding to edge (from corner to corner)
+- run first iter of algorithm with that ^  margin (or slightly more)
+- run marching points with that margin
+12. Marching points
+13. Warp matrix
+
 """
 
 
-img = cv2.imread("CNT.jpg", cv2.IMREAD_GRAYSCALE)
-cv2.imwrite("lines.jpg", img)
+orig = cv2.imread("thresh_closed_blurred.jpg", cv2.IMREAD_GRAYSCALE)
+img = cv2.imread("contours.jpg", cv2.IMREAD_GRAYSCALE)
+lines = get_hough_lines(cv2.imread("CNT.jpg", cv2.IMREAD_GRAYSCALE))
+lines = average_lines(lines)
+points = get_intersection_points(lines)
+center = get_page_center(points)
+corner = march_corner(orig, center, points[3], 100)
+img = draw_hough_lines(np.stack([img, img, img], axis=-1), lines)
+img = draw_points(img, points)
+img = draw_points(img, [corner[::-1]])
+cv2.imwrite("corner.jpg", img)
+

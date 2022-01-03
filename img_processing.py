@@ -215,11 +215,13 @@ def draw_points(img: np.ndarray, points: List[Tuple[int, int]]) -> np.ndarray:
     return img
 
 
+## Redundant. Switching to sliding windows
 def get_page_center(points: List[Tuple[int, int]]) -> Tuple[int, int]:
     """Get center of page knowing the corners."""
     return np.mean(points, axis=0, dtype=int)
 
 
+## Redundant. Switching to sliding windows
 def march_corner(img: np.ndarray,
                  center: Tuple[int, int],
                  corner: Tuple[int, int],
@@ -262,6 +264,86 @@ def march_corner(img: np.ndarray,
     return (x, y)
 
 
+## FIXME Check which corners are which !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+def get_affine_src_points(img: np.ndarray,
+                        corners: List[List[int]],
+                        n_points: int,
+                        window_width: int) -> List[List[int]]:
+    """
+    Perform the sliding window algorithm to get `n_points` points
+    on each side for affine transformation.
+
+    Expects binary image!!
+    """
+    ## Source points will be appended here
+    ## Destination point order must match this order:
+    ## Right edge from top to bottom (`n_points` points), then
+    ## left edge from top to bottom (`n_points` points)
+    src_pts = []
+
+    ## ======================= RIGHT EDGE =====================================================
+
+    ## Right edge
+    window_height = int((corners[0/123][0/1] - corners[0/123][0/1]) / n_points) ## FIXME Check order of edges
+
+    ## Precalculate first window left. Later calculated based on previous window
+    left = corners[0/123][0/1] - int(window_width / 2)
+
+    ## Go downwards from top corner to bottom corner
+    for i in range(n_points):
+        ## Calculate window
+        window_upper = corners[0/123][0/1] + window_width*i
+
+        ## Get window as section of image
+        window = img[window_upper:window_upper+window_height, left:left+window_width]
+
+        ## Get average index of right edge in the window
+        ## HACK Calculated using `np.count_nonzero()` since the white region in the window should
+        ## be solid and starting at the left edge of the window
+        ## Point coordinate is then calculated as the mean of the edge and the middle of the window
+        edge_indices = np.count_nonzero(window, axis=1)
+        point_y = left + np.mean(edge_indices, dtype=int)
+        point_x = int(window_upper + window_height*(i+1)/2)
+        src_pts.append((point_x, point_y))
+
+        ## Reposition window horizontally to ensure it does not go out of bounds
+        ## Left in the next window is moved to match this window's edge point
+        left = point_y - int(window_width/2)
+
+
+    ## ======================= LEFT EDGE ======================================================
+
+
+    ## Left edge
+    window_height = int((corners[0/123][0/1] - corners[0/123][0/1]) / n_points) ## FIXME Check order of edges
+
+    ## Precalculate first window left. Later calculated based on previous window
+    left = corners[0/123][0/1] - int(window_width / 2)
+
+    ## Go downwards from top corner to bottom corner
+    for i in range(n_points):
+        ## Calculate window
+        window_upper = corners[0/123][0/1] + window_width*i
+
+        ## Get window as section of image
+        window = img[window_upper:window_upper+window_height, left:left+window_width]
+
+        ## Get average index of right edge in the window
+        ## HACK Calculated using `np.count_nonzero()` since the white region in the window should
+        ## be solid and starting at the left edge of the window
+        ## Point coordinate is then calculated as the mean of the edge and the middle of the window
+        edge_indices = np.count_nonzero(window, axis=1)
+        point_y = left + window_width - np.mean(edge_indices, dtype=int) ## Important change here (must be calculated differently)
+        point_x = int(window_upper + window_height*(i+1)/2)
+        src_pts.append((point_x, point_y))
+
+        ## Reposition window horizontally to ensure it does not go out of bounds
+        ## Left in the next window is moved to match this window's edge point
+        left = point_y - int(window_width/2)
+
+
+
+
 """
 Processing path:
 1. Low thresh (global)
@@ -277,10 +359,7 @@ Processing path:
 11. Get inside corners
 -------------------------------------------
 TODO
-- get max deviation of edge from line corresponding to edge (from corner to corner)
-- run first iter of algorithm with that ^  margin (or slightly more)
-- run marching points with that margin
-12. Marching points
+12. Sliding windows
 13. Warp matrix
 
 """

@@ -1,2 +1,6 @@
-opencv-python>=4.3.0.36
+opencv-python
 numpy
+glob
+tqdm
+pyyaml
+pillow

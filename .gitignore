@@ -1,6 +1,6 @@
-*.pdf
-*.PDF
-*.jpg
-*.png
 __pycache__
 .vscode
+legacy.py
+backup.txt
+output/*
+*.bat
